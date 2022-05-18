@@ -1,7 +1,11 @@
+from email.policy import default
 from bs4 import BeautifulSoup
 import pandas as pd
 import requests
 from tqdm import tqdm
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import Optional, Union
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.87 Safari/537.36',
@@ -169,28 +173,101 @@ class Players:
             players.append(p_dict)
         return pd.DataFrame.from_dict(players)
 
+@dataclass
+class PlayerDC:
+    name_id: str
+    url: str
+    recruit_name: str
+    pos: str
+    height: str
+    weight: int
+    high_school: str
+    city: str
+    state: str
+    class_year: int
+    composite_score: Optional[Union[float, None]]
+    national_composite_rank: Optional[Union[int, None]]
+    position_composite_rank: Optional[Union[int, None]]
+    state_composite_rank: Optional[Union[int, None]]
+    normal_score: Optional[Union[int, None]]
+    national_normal_rank: Optional[Union[int, None]]
+    position_normal_rank: Optional[Union[int, None]]
+    state_normal_rank: Optional[Union[int, None]]
+    experts:Optional[Union[dict, None]]
+    college_interest: Optional[dict]
+    accolades: Optional[Union[list, None]]
+    evaluators: Optional[Union[dict, None]]
+    background: Optional[Union[str, None]]
+    skills: Optional[Union[dict, None]]
+    stats: Optional[Union[pd.DataFrame, None]]
+
+
 class Player:
     def __init__(self, name_id:str):
         """name_id found from 247 sports player page like Travis-Hunter-46084728"""
         self.name_id = name_id
+        self.url = f"https://247sports.com/Player/{self.name_id}/"
+        self.player = self._parse_player()
         
     def _parse_player(self):
-        url = f"https://247sports.com/Player/{self.name_id}/"
-        page = requests.get(url, headers=HEADERS)
+        page = requests.get(self.url, headers=HEADERS)
         soup = BeautifulSoup(page.content, "html.parser")
 
-        self.recruit_name = soup.find("h1", class_ = "name").text 
+        print("Recruit name...")
+        recruit_name = soup.find("h1", class_ = "name").text 
+
         # find metrics
-        self.pos, self.height, self.weight = self._find_metrics(soup)
+        print("Getting metrics...")
+        pos, height, weight = self._find_metrics(soup)
 
         # find details
-        self.high_school, self.city, self.state, self.class_year = self._find_details(soup)
+        print("Getting details...")
+        high_school, city, state, class_year = self._find_details(soup)
         
         # get rankings
-        self.composite_score, self.national_composite_rank, \
-        self.position_composite_rank, self.state_composite_rank, \
-        self.normal_score, self.national_normal_rank, \
-        self.position_normal_rank, self.state_normal_rank = self._find_ratings(soup, self.pos, self.state)
+        print("Getting rankings...")
+        ratings_data = self._find_ratings(soup, pos, state)
+
+        # get expert predictions
+        print("Getting predictions...")
+        experts = self._find_predictions(soup)
+
+        # get college interest
+        print("Getting College Interests...")
+        college_interest = self._find_college_interest(soup)
+
+        # get accolades
+        print("Getting Accolades...")
+        accolades = self._find_accolades(soup)
+
+        # get evaluators, background and skills
+        print("Getting Evaluators, Background, and Skills...")
+        evaluators, background, skills = self._find_scouting_report(soup)
+
+        # get stats
+        print("Getting stats...")
+        stats = self._find_stats(soup)
+
+        return PlayerDC(
+            name_id = self.name_id, 
+            url = self.url, 
+            recruit_name = recruit_name, 
+            pos = pos, 
+            height = height, 
+            weight = weight,
+            high_school = high_school, 
+            city = city, 
+            state = state, 
+            class_year = class_year,
+            experts = experts, 
+            college_interest = college_interest,
+            accolades = accolades,
+            evaluators = evaluators,
+            background = background, 
+            skills = skills, 
+            stats = stats,
+            **ratings_data
+        )
 
     def _find_metrics(self, soup_page):
         metrics = soup_page.find("ul", class_ = "metrics-list").find_all("li")
@@ -218,36 +295,242 @@ class Player:
 
     def _find_ratings(self, soup_page, pos, state):
         ratings_sections = soup_page.find_all("section", class_ = "rankings-section")
+        data = {}
         for rs in ratings_sections:
-            title = rs.find("h3")
-            if title == "247Sports Composite":
+            title = rs.find("h3", class_ = 'title').text
+            if 'composite' in title.lower():
                 ranking = rs.find("div", class_ = "ranking")
-                composite_score = ranking.find("div", class_ = "rank-block")
+                data['composite_score'] = ranking.find("div", class_ = "rank-block")
                 rank_list = rs.find("ul", class_ = "ranks-list").find_all("li")
                 for rl in rank_list:
                     rank_name, rank_value = rl.find("b").text, rl.find("a").find("strong").text
                     if rank_name == 'Natl.':
-                        national_composite_rank = rank_value
+                        data['national_composite_rank'] = rank_value
                     elif rank_name == pos:
-                        position_composite_rank = rank_value
+                        data['position_composite_rank'] = rank_value
                     else:
-                        state_composite_rank = rank_value
+                        data['state_composite_rank'] = rank_value
             else:
                 ranking = rs.find("div", class_ = "ranking")
-                normal_score = ranking.find("div", class_ = "rank-block")
+                data['normal_score'] = ranking.find("div", class_ = "rank-block")
                 rank_list = rs.find("ul", class_ = "ranks-list").find_all("li")
                 for rl in rank_list:
                     rank_name, rank_value = rl.find("b").text, rl.find("a").find("strong").text
                     if rank_name == 'Natl.':
-                        national_normal_rank = rank_value
+                        data['national_normal_rank'] = rank_value
                     elif rank_name == pos:
-                        position_normal_rank = rank_value
+                        data['position_normal_rank'] = rank_value
                     else:
-                        state_normal_rank = rank_value
-        return  composite_score, national_composite_rank, \
-                position_composite_rank, state_composite_rank, \
-                normal_score, national_normal_rank, \
-                position_normal_rank, state_normal_rank
+                        data['state_normal_rank'] = rank_value
+        return data
 
-                    
-            
+    def _get_expert_averages(self, soup):
+        expert_averages = soup.find("ul", class_ = "prediction-list long")
+        list_ea = expert_averages.find_all('li')[1:]
+        list_ea_dict = {}
+        for lea in list_ea:
+            link = lea.find('a').find('img', class_ = 'team-image')['src']
+            name = lea.find("span").text
+            list_ea_dict[link] = name
+        return list_ea_dict
+
+    def _find_predictions(self, soup):
+        experts = soup.find("ul", class_ = "prediction-list long expert")
+        if not experts:
+            return None
+
+        img_conversion = self._get_expert_averages(soup)
+        lead_experts = experts.find_all("li")[1:]
+        lead_experts_dict = defaultdict(dict)
+        for i, expert in enumerate(lead_experts):
+            expert_name = expert.find('a', class_='expert-link').text
+            lead_experts_dict[expert_name]['expert_score'] = expert.find('b', class_ = "confidence-score lock").text
+            lead_experts_dict[expert_name]['school'] = img_conversion[expert.find('img')['src']]
+        return lead_experts_dict
+
+    def _find_college_interest(self, soup):
+        view_all_colleges = soup.find('a', class_ = "college-comp__view-all")
+        if view_all_colleges:
+            url = view_all_colleges['href']
+            page = requests.get(url, headers=HEADERS)
+            soup = BeautifulSoup(page.content, "html.parser")
+            interests = soup.find("ul", class_ = "recruit-interest-index_lst").find_all("li")
+            school_dict = defaultdict(dict)
+            for interest in interests:
+                print(interest.find('div', class_='left').prettify())
+                first_block, second_block = interest.find('div', class_='left').find_all('div')
+                
+                # collect college name
+                college_name = first_block.find('a').text
+
+                # collect college statuses
+                college_status = first_block.find("span", class_="status")
+                college_status_text = college_status.find('span', class_='grey').text.split(': ')[1]
+                college_status_date = college_status.find("a")
+                if college_status_date:
+                    college_status_date = college_status_date.text
+                else:
+                    college_status_date = None
+
+                # collect visit
+                visit = second_block.find('span', class_='visit').text
+                if '-' in visit:
+                    visit = None
+                
+                # collect offer
+                offer = second_block.find('span', class_='offer').text.strip()
+                if 'yes' in offer.lower():
+                    offer = True
+                else:
+                    offer = False
+
+                school_dict[college_name]['Status'] = college_status_text
+                school_dict[college_name]['Status_Date'] = college_status_date
+                school_dict[college_name]['Visit'] = visit
+                school_dict[college_name]['Offere'] = offer           
+
+        else:
+            schools = soup.find('ul', class_ = "college-comp__body-list").find_all('li')
+            school_dict = defaultdict(dict)
+            for school in schools:
+                # get college name
+                college_name = school.find('div', class_="college-comp__team-block") \
+                .find('a', class_="college-comp__team-name-link").text
+
+                # get offer
+                offer = school.find("div", class_ = "college-comp__offer-block")
+                if offer.find('b', class_ = "college-comp__offer-check checkmark"):
+                    offer = True
+                else:
+                    offer = False
+                
+                if school.find("span", class_="college-comp__interest-level college-comp__interest-level--signed-bg"):
+                    signed = True
+                else:
+                    signed = False
+                
+                school_dict[college_name]['Offer'] = offer
+                school_dict[college_name]['Signed'] = signed
+
+        return school_dict
+
+    def _find_accolades(self, soup):
+        accolades = soup.find('section', class_ = 'accolades')
+        if not accolades:
+            return None
+        
+        accolades_list = accolades.find("ul").find_all("li")
+        accolades_final = [accolade.find('a', class_='event-link').text for i, accolade in enumerate(accolades_list)]
+        return accolades_final
+
+    def _get_background_skills(self, soup):
+        ## collect background
+        background_skills_dict = {}
+        background_skills = soup.find("div", class_="background-and-skills")
+        background = background_skills.find("section", class_="athletic-background").find("div", class_='body').find_all('p')
+        background_text = " ".join([b.text for b in background if b.text])
+
+        ## collect skills
+        skills = background_skills.find("section", class_='skills').find('div', class_='body').find('ul').find_all('li')
+        skills_dict = {}
+        for skill in skills:
+            skill_text = skill.find("span", class_='text').text
+            skill_rating = int(skill.find("b").text)
+            skills_dict[skill_text] = skill_rating
+
+        return background_text, skills_dict
+
+
+    def _find_scouting_report(self, soup):
+        scouting_report = soup.find("section", class_="scouting-report")
+        if not scouting_report:
+            return None
+
+        evaluations = scouting_report.find("header").find('a', class_='view-all-eval-link')
+        if evaluations:
+            url = evaluations['href']
+            page = requests.get(url, headers=HEADERS)
+            soup = BeautifulSoup(page.content, 'html.parser')
+            evaluators = soup.find("section", class_="main-content list-content")
+            evaluators_list = evaluators.find("ul", class_='evaluation-list').find_all("li")
+            evaluators_dict = defaultdict(dict)
+            for evaluator in evaluators_list:
+                evaluator_list = evaluator.find("ul", class_="highlights-list")
+                
+                # evaluator name and region
+                evaluator_eval = evaluator_list.find("li", class_="eval-meta evaluator")
+                name = evaluator_eval.find("b", class_="text").text
+                region = evaluator_eval.find("span", class_="uppercase").text
+
+                # get projection
+                evaluator_projection = evaluator_list.find("li", class_="eval-meta projection")
+                projection = evaluator_projection.find("b", class_="text").text
+
+                # get comparison
+                evaluator_comparison = evaluator_list.find("li", class_="eval-meta")
+                comparison = evaluator_comparison.find("a").text
+                comparison_team = evaluator_comparison.find("span", class_="uppercase").text
+
+                # get evaluation
+                evaluation_data = evaluator.find("p", class_="eval-text")
+                evaluation_date = evaluation_data.find("strong", class_="eval-date").text.strip()
+                evaluation_text = evaluation_data.text.strip()
+
+                evaluators_dict[name]['region'] = region
+                evaluators_dict[name]['projection'] = projection
+                evaluators_dict[name]['comparison'] = comparison
+                evaluators_dict[name]['comparison_team'] = comparison_team
+                evaluators_dict[name]['evaluation_date'] = evaluation_date
+                evaluators_dict[name]['evaluation'] = evaluation_text
+
+            # get background_and_skills
+            background, skills = self._get_background_skills(scouting_report)
+
+        else:
+            evaluators = soup.find('section', class_='scouting-report')
+            evaluators_dict = defaultdict(dict)
+
+            # get highlights
+            highlights = evaluators.find("section", class_="highlights")
+            eval_date = highlights.find('div').find('h4').text.split(" ")[-1]
+            evaluator = highlights.find("div", class_='evaluator')
+            name = evaluator.find("b", class_='text').text
+            region = evaluator.find('span', class_='uppercase').text
+
+            # get projections
+            projection = highlights.find("div", class_='projection').find('b').text
+
+            # get comparison
+            comparison = highlights.find_all('div')[-1]
+            comparison_name = comparison.find('a').text
+            comparison_team = comparison.find("span").text
+
+            # get evaluations
+            evaluations = evaluators.find("section", class_='evaluation').find_all('p')[1]
+            evaluation = evaluations.text
+
+            # store evaluation
+            evaluators_dict[name]['region'] = region
+            evaluators_dict[name]['projection'] = projection
+            evaluators_dict[name]['comparison'] = comparison_name
+            evaluators_dict[name]['comparison_team'] = comparison_team
+            evaluators_dict[name]['evaluation_date'] = eval_date
+            evaluators_dict[name]['evaluation'] = evaluation
+
+            # collect background and skills
+            background, skills = self._get_background_skills(evaluators)
+
+        return evaluators_dict, background, skills
+        
+    def _find_stats(self, soup):
+        stats = soup.find('section', class_="profile-stats")
+        if not stats:
+            return None
+
+        left_table_html = str(stats.find("table", class_='left-table'))
+        right_table_html = str(stats.find('table', class_='right-table'))
+        left_table = pd.read_html(left_table_html)[0]
+        right_table = pd.read_html(right_table_html)[0]
+        total = pd.concat([left_table, right_table], axis = 1)
+        return total
+        
