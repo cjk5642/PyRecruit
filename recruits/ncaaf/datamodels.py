@@ -5,6 +5,8 @@ import pandas as pd
 
 DataFrame = NewType('DataFrame', pd.DataFrame)
 collegeinterest = NewType("CollegeInterest", Protocol)
+pedigree = NewType('Connections', Protocol)
+recruiter = NewType('Staff', Protocol)
 
 @dataclass
 class PlayerDC:
@@ -33,7 +35,8 @@ class PlayerDC:
     background: str = None
     skills: dict = None
     stats: DataFrame = None
-    connections: Union[list, str] = None
+    connections: Union[List[pedigree], pedigree, None] = None
+    recruited_by: Union[List[recruiter], recruiter, None] = None
 
 @dataclass
 class Evaluator:
@@ -60,3 +63,8 @@ class CollegeInterest:
     visit: Union[str, None]
     offered: Union[bool, None]
     recruited_by: Union[str, list] = None
+
+@dataclass
+class StaffMember:
+    name: str
+    
