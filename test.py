@@ -1,3 +1,3 @@
 from recruits.ncaaf.player import Player
-player = Player("Travis-Hunter-46084728").player
-print(player)
+p = Player("Arch-Manning-46080533").player
+print(p.college_interest)
