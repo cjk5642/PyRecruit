@@ -1,4 +1,5 @@
 from msilib.schema import Class
+from optparse import Option
 from typing import Optional, Union, NewType, List, Protocol
 from dataclasses import dataclass
 import pandas as pd
@@ -6,7 +7,9 @@ import pandas as pd
 DataFrame = NewType('DataFrame', pd.DataFrame)
 collegeinterest = NewType("CollegeInterest", Protocol)
 pedigree = NewType('Connections', Protocol)
-recruiter = NewType('Staff', Protocol)
+recruiter = NewType('StaffMember', Protocol)
+top_commit = NewType("TopCommit", Protocol)
+coach_history = NewType("CoachHistory", Protocol)
 
 @dataclass
 class PlayerDC:
@@ -36,7 +39,6 @@ class PlayerDC:
     skills: dict = None
     stats: DataFrame = None
     connections: Union[List[pedigree], pedigree, None] = None
-    recruited_by: Union[List[recruiter], recruiter, None] = None
 
 @dataclass
 class Evaluator:
@@ -62,9 +64,41 @@ class CollegeInterest:
     status_date: Union[str, None]
     visit: Union[str, None]
     offered: Union[bool, None]
-    recruited_by: Union[str, list] = None
+    recruited_by: List[recruiter] = None
 
 @dataclass
 class StaffMember:
     name: str
-    
+    position: str = None
+    alma_mater: str = None
+    college: str = None
+    staff_member_age: int = None
+    top_commits: Union[List[top_commit], top_commit, None] = None
+    coach_history: Union[List[coach_history], coach_history, None] = None
+    commits: Optional[int] = None
+    avg_rtg: Optional[float] = None
+    natl_rk: Optional[int] = None
+    star_5: Optional[int] = None
+    star_4: Optional[int] = None
+    star_3: Optional[int] = None
+    conference: Optional[str] = None
+
+
+@dataclass
+class TopCommit:
+    name: str
+    location: str
+    position: str
+    height: str
+    weight: str
+    stars: int
+    rating: float
+    college: str
+    commitment_date: str
+
+@dataclass
+class CoachHistory:
+    college: str
+    year: str
+    position: str
+

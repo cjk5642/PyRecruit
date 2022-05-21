@@ -3,17 +3,19 @@ import pandas as pd
 import requests
 from tqdm import tqdm
 from collections import defaultdict
-from utils import HEADERS, Staff, Connections, CollegeRecruitingInterest, Evaluators
-from datamodels import PlayerDC
+from .utils import *
+from .datamodels import PlayerDC
 
 class Players:
+    players = None
     def __init__(self, 
                  year:int = None, 
                  institution:str = "HighSchool", 
                  pos:str = None, 
                  composite_rankings:bool = True, 
                  state:str = None,
-                 top:int = 1000):
+                 top:int = 1000,
+                 in_depth: bool = False):
 
         self.year = 2022 if not year else year
         self.institution = institution
@@ -21,9 +23,9 @@ class Players:
         self.top = top
         self.composite_rankings = composite_rankings
         self.state = state
+        self.in_depth = in_depth
         self.url = self._create_url()
         self.html_players = self._parse_players()
-        self.dataframe = self._filter_players()
 
     def _check_position(self, pos:str):
         positions = ["QB", "RB", "WR", "TE", "OT", "IOL", "EDGE", "DL", "LB", "CB", "S", "ATH", "K", "P", "LS", "RET"]
@@ -154,8 +156,8 @@ class Players:
         
         except:
             return None, None
-
-    def _filter_players(self):
+    @property
+    def get_players(self):
         players = []
         for player in tqdm(self.html_players):
             p_dict = {}
@@ -166,7 +168,18 @@ class Players:
             p_dict['national_rank'], p_dict['position_rank'], p_dict['state_rank'] = self._get_ratings(player)
             p_dict['commited_team'], p_dict['commited_team_percentage'] = self._get_status(player)
             players.append(p_dict)
-        return pd.DataFrame.from_dict(players)
+        # cache player list in class
+        Players.players = players
+        return players 
+
+    @property
+    def to_df(self):
+        if Players.players is None:
+            Players.players = self.get_players
+        
+        return pd.DataFrame.from_dict(Players.players)
+
+
 
 class Player:
     def __init__(self, name_id:str):
@@ -318,7 +331,6 @@ class Player:
             lead_experts_dict[expert_name]['expert_score'] = expert.find('b', class_ = "confidence-score lock").text
             lead_experts_dict[expert_name]['school'] = img_conversion[expert.find('img')['src']]
         return lead_experts_dict
-
 
     def _find_accolades(self, soup):
         accolades = soup.find('section', class_ = 'accolades')

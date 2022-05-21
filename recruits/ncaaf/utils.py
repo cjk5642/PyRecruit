@@ -1,5 +1,5 @@
 import requests
-from datamodels import *
+from .datamodels import *
 from bs4 import BeautifulSoup
 
 HEADERS = {
@@ -13,45 +13,57 @@ class Staff:
         self.soup = soup
         self.page = self._gain_primary()
 
-    def _gain_primary(self):
-        if self.soup:
-            return self.soup
-        
+    def _gain_primary(self):        
         if self.url:
             page = requests.get(self.url, headers = HEADERS)
             soup = BeautifulSoup(page.content, 'html.parser')
             return soup
         
-        if self.name:
+        if self.name_id:
             url = f"https://247sports.com/Coach/{self.name_id}/"
             page = requests.get(url, headers = HEADERS)
             soup = BeautifulSoup(page.content, 'html.parser')
             return soup
+        
+        return self.soup
     
     @property
     def member(self):
-        pass
+        meta = self._get_meta(self.page)
+        ratings = self._get_ratings(self.page)
+        commits = self._get_top_commits(self.page)
+        coach_history = self._get_coach_history(self.page)
 
-    def _get_meta(self, soup):
+        if ratings:
+            return StaffMember(
+                **meta, **ratings, top_commits=commits, coach_history=coach_history
+            )
+        else:
+            return StaffMember(
+                **meta, top_commits=commits, coach_history=coach_history
+            )
+        
+    def _get_meta(self, page):
         data = {}
         # get name
-        data['name'] = soup.find('h1', class_='name').strip()
-
+        data['name'] = page.find('h1', class_='name').text.strip()
         # get metrics
-        metrics_list = soup.find("ul", class_='metrics-list').find_all('li')
+        metrics_list = page.find("ul", class_='metrics-list').find_all('li')
         for ml in metrics_list:
             met = ml.find_all('span')
-            if met[0].lower() == 'job':
-                data['job'] = met[1].strip()
+            if met[0].text.lower() == 'job':
+                data['position'] = met[1].text.strip()
 
         # get alma mater
-        coach_details = soup.find("ul", class_='details coach').find_all('li')
-        for cd in coach_details:
-            if cd.get('class') == 'coach-alma-mater-item':
-                data['alma_mater'] = cd.find_all('span')[-1].strip()
+        coach_details = page.find("ul", class_='details coach')
+        if coach_details:
+            coach_details = coach_details.find_all('li')
+            for cd in coach_details:
+                if cd.get('class') == 'coach-alma-mater-item':
+                    data['alma_mater'] = cd.find_all('span')[-1].strip()
 
         # get vitals and team info
-        team = soup.find('section', class_='team-block')
+        team = page.find('section', class_='team-block')
         if team:
             data['college'] = team.find('h2').text.strip()
             vitals = team.find('ul', class_='vitals').find_all('li')
@@ -62,17 +74,79 @@ class Staff:
 
         return data
     
-    def _get_ratings(self, soup):
+    def _get_ratings(self, page):
         data = {}
-        rankings = soup.find('section', class_='rankings-section').find_all('li')
+        rankings = page.find('section', class_='rankings-section')
+        if not rankings:
+            return None
+        
+        rankings = rankings.find_all('li')
+        non_conf = ["commits", 'avg_rtg', 'natl_rk', 'star_5', 'star_4', 'star_3']
         for rank in rankings:
-            rank_name = rank.find('b').text
-            rank_value = rank.find('a').find('strong').text.strip()
-            data[rank_name] = rank_value
+            rank_name = rank.find('b').text.replace('.', '').replace(' ', '_').replace('-', "_").lower()
+            if rank_name[0].isdigit():
+                num, star = rank_name.split('_')
+                rank_name = "_".join([star, num])
+
+            rank_value = rank.find('a')
+            if rank_value:
+                rank_value = rank_value.find('strong').text.strip()
+                if rank_name in non_conf:
+                    data[rank_name] = rank_value
+                else:
+                    data['conference'] = rank_value
         return data
 
-    def _get_commites(self, soup):
-        pass
+    def _get_top_commits(self, page):
+        commits = page.find_all('ul', class_='commits-details')
+        if not commits:
+            return None
+
+        details = []
+        for commit in commits:
+            _, name, position, height_weight, rating, commitment = commit.find_all("li")
+
+            # get name
+            recruit_name = name.find('a', class_='player').text
+            location = ' '.join([string.strip() for string in name.find_all("span")])
+
+            # position
+            position = position.find('span').text.strip()
+
+            # find height and weight
+            height, weight = height_weight.find('span').text.split(" / ")
+
+            # find rating and stars
+            stars = len(rating.find_all("span", class_="icon-starsolid yellow"))
+            rating = float(rating.find('span', class_="rating").text)
+
+            # find commitment
+            college = commitment.find("a", class_='player-institution').find('img')['alt'].strip()
+            commitment_date = commitment.find("span", class_='commit-date').text.strip()
+
+            commit = TopCommit(
+                name = recruit_name, location = location, position = position,
+                height = height, weight = weight, stars = stars, rating = rating,
+                college = college, commitment_date = commitment_date
+            )
+            details.append(commit)
+
+        return details
+
+    def _get_coach_history(self, page):
+        coach_history = page.find("section", class_='coach-history')
+        if not coach_history:
+            return None
+        
+        coach_history = coach_history.find('div', class_='body').find_all('li')
+        data = []
+        for position in coach_history:
+            college, (years, job) = position.find('img')['alt'], position.find_all('span')
+            years, job = years.text.strip(), job.text.strip()
+
+            coachhistory = CoachHistory(college=college, year=years, position=job)
+            data.append(coachhistory)
+        return data
 
 class Connections:
     def __init__(self, soup):
@@ -146,47 +220,19 @@ class CollegeRecruitingInterest:
                 offer = False
 
             # collect recruited by
-            recruited_by = second_block.find("ul", class_='interest-class_lst')
+            recruited_by = second_block.find("ul", class_='interest-details_lst')
             if not recruited_by:
                 recruiters = None
             else:
-                recruited_by = recruited_by.find_all("li")
-                recruiters = []
-                for recruiter in recruited_by:
-                    recruiter = recruiter.find("a").text
+                recruited_by = recruited_by.find_all("li")[1:]
+                recruiters = [Staff(url = recruiter.find("a")['href']).member for recruiter in recruited_by]
 
             school = CollegeInterest(
                 college=college_name, status=college_status_text,
-                status_date=college_status_date, visit=visit, offered=offer
+                status_date=college_status_date, visit=visit, offered=offer,
+                recruited_by=recruiters
             )
             school_list.append(school)      
-        return school_list
-
-    def _examine_present_colleges(self, page):
-        school_list = []
-        schools = page.find('ul', class_ = "college-comp__body-list").find_all('li')
-        for school in schools:
-            # get college name
-            college_name = school.find('div', class_="college-comp__team-block") \
-            .find('a', class_="college-comp__team-name-link").text
-
-            # get offer
-            offer = school.find("div", class_ = "college-comp__offer-block")
-            if offer.find('b', class_ = "college-comp__offer-check checkmark"):
-                offer = True
-            else:
-                offer = False
-            
-            if school.find("span", class_="college-comp__interest-level college-comp__interest-level--signed-bg"):
-                signed = True
-            else:
-                signed = False
-            
-            school = CollegeInterest(
-                college=college_name, status=college_status_text,
-                status_date=college_status_date, visit=visit, offered=offer
-            )
-            school_list.append(school)
         return school_list
 
     @property
@@ -197,7 +243,7 @@ class CollegeRecruitingInterest:
             school_list = self._examine_more_colleges(view_all_colleges['href'])
 
         else:
-            school_list = self._examine_present_colleges(self.soup)
+            school_list = None
         return school_list
 
 class BackgroundSkills:
@@ -312,7 +358,7 @@ class Evaluators:
 
     @property
     def evaluator(self):
-        scouting_report = soup.find("section", class_="scouting-report")
+        scouting_report = self.soup.find("section", class_="scouting-report")
         if not scouting_report:
             return None
 

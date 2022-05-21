@@ -1,3 +1,3 @@
-from recruits.ncaaf.player import Player
-p = Player("Arch-Manning-46080533").player
-print(p.college_interest)
+from recruits.ncaaf.player import Player, Players
+p = Players(year = 2020)
+print(p.to_df)
