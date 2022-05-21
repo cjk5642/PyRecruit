@@ -2,8 +2,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import requests
 from tqdm import tqdm
-from collections import defaultdict
-from .utils import *
+from .utils import HEADERS, Ratings247, CollegeRecruitingInterest, Evaluators, Connections, Expert
 from .datamodels import PlayerDC
 
 class Players:
@@ -179,33 +178,43 @@ class Players:
         
         return pd.DataFrame.from_dict(Players.players)
 
-
-
 class Player:
     def __init__(self, name_id:str):
         """name_id found from 247 sports player page like Travis-Hunter-46084728"""
         self.name_id = name_id
         self.url = f"https://247sports.com/Player/{self.name_id}/"
 
+    def _get_page(self, url: str):
+        if not url.startswith("https:"):
+            url = "https:" + url
+        page = requests.get(url, headers=HEADERS)
+        soup = BeautifulSoup(page.content, "html.parser")
+        return soup
+
     @property  
     def player(self):
-        page = requests.get(self.url, headers=HEADERS)
-        soup = BeautifulSoup(page.content, "html.parser")
+        soup = self._get_page(self.url)
+
+        # determine if older or current recruit
+        as_a_prospect = soup.find("section", class_="as-a-prospect")
+        if as_a_prospect:
+            profile_link = as_a_prospect.find("a", class_='view-profile-link')['href']
+            soup = self._get_page(profile_link)
 
         print("Recruit name...")
         recruit_name = soup.find("h1", class_ = "name").text 
 
         # find metrics
         print("Getting metrics...")
-        pos, height, weight = self._find_metrics(soup)
+        metrics = self._find_metrics(soup)
 
         # find details
         print("Getting details...")
-        high_school, city, state, class_year = self._find_details(soup)
+        details = self._find_details(soup)
         
         # get rankings
         print("Getting rankings...")
-        ratings_data = self._find_ratings(soup, pos, state)
+        ratings_data = Ratings247(soup, metrics['pos'], details['state']).ratings
 
         # get expert predictions
         print("Getting predictions...")
@@ -235,13 +244,6 @@ class Player:
             name_id = self.name_id, 
             url = self.url, 
             recruit_name = recruit_name, 
-            pos = pos, 
-            height = height, 
-            weight = weight,
-            high_school = high_school, 
-            city = city, 
-            state = state, 
-            class_year = class_year,
             experts = experts, 
             college_interest = college_interest,
             accolades = accolades,
@@ -250,66 +252,42 @@ class Player:
             skills = skills, 
             stats = stats,
             connections = connections,
-            **ratings_data
+            ratings=ratings_data,
+            **metrics,
+            **details
         )
 
     def _find_metrics(self, soup_page):
+        data = {}
         metrics = soup_page.find("ul", class_ = "metrics-list").find_all("li")
         for m in metrics:
             spans =  m.find_all("span")
             if spans[0].text == 'Pos':
-                pos = spans[1]
-            elif spans[0].text == "Height":
-                height = spans[1]
-            else:
-                weight = spans[1]
-        return pos, height, weight
+                data['pos'] = spans[1].text
+            if spans[0].text == "Height":
+                data['height'] = spans[1].text
+            if spans[0].text == 'Weight':
+                data['weight'] = int(spans[1].text)
+        return data
 
     def _find_details(self, soup_page):
         details = soup_page.find("ul", class_ = "details").find_all("li")
+        data = {}
         for d in details:
             spans = d.find_all("span")
             if spans[0].text == 'High School':
-                hs = spans[1].find("a").text
+                data['high_school'] = spans[1].find("a").text.strip()
             elif spans[0].text == 'City':
-                city, state = spans[1].text.split(", ")
-            elif spans[0].text == "Class":
-                cls = spans[1].text
-        return hs, city, state, cls
-
-    def _find_ratings(self, soup_page, pos, state):
-        ratings_sections = soup_page.find_all("section", class_ = "rankings-section")
-        data = {}
-        for rs in ratings_sections:
-            title = rs.find("h3", class_ = 'title').text
-            if 'composite' in title.lower():
-                ranking = rs.find("div", class_ = "ranking")
-                data['composite_score'] = ranking.find("div", class_ = "rank-block")
-                rank_list = rs.find("ul", class_ = "ranks-list").find_all("li")
-                for rl in rank_list:
-                    rank_name, rank_value = rl.find("b").text, rl.find("a").find("strong").text
-                    if rank_name == 'Natl.':
-                        data['national_composite_rank'] = rank_value
-                    elif rank_name == pos:
-                        data['position_composite_rank'] = rank_value
-                    else:
-                        data['state_composite_rank'] = rank_value
-            else:
-                ranking = rs.find("div", class_ = "ranking")
-                data['normal_score'] = ranking.find("div", class_ = "rank-block")
-                rank_list = rs.find("ul", class_ = "ranks-list").find_all("li")
-                for rl in rank_list:
-                    rank_name, rank_value = rl.find("b").text, rl.find("a").find("strong").text
-                    if rank_name == 'Natl.':
-                        data['national_normal_rank'] = rank_value
-                    elif rank_name == pos:
-                        data['position_normal_rank'] = rank_value
-                    else:
-                        data['state_normal_rank'] = rank_value
+                data['city'], data['state'] = spans[1].text.strip().split(", ")
+            elif spans[0].text.lower().strip() == "class":
+                data['class_year'] = int(spans[1].text.strip())
         return data
 
     def _get_expert_averages(self, soup):
         expert_averages = soup.find("ul", class_ = "prediction-list long")
+        if not expert_averages:
+            return None
+
         list_ea = expert_averages.find_all('li')[1:]
         list_ea_dict = {}
         for lea in list_ea:
@@ -318,19 +296,74 @@ class Player:
             list_ea_dict[link] = name
         return list_ea_dict
 
+    def _get_extended_predictions(self, url:str):
+        soup = self._get_page(url)
+        lead_experts = soup.find("ul", class_='cb-list no-border').find_all('li')
+        other_experts = soup.find("ul", class_='cb-list no-margin').find_all('li')
+        total_experts = lead_experts + other_experts
+        expert_list = []
+        for expert in total_experts:
+
+            # get name and title
+            exp = expert.find("div", class_='name')
+            name = exp.find("a").text.strip()
+            title = exp.find_all("span")[-1].text.strip()
+
+            # get accuracy for this year
+            acc_year = expert.find("div", class_="accuracy year").find_all('span')[-1].text
+            acc_year = float(acc_year.translate(str.maketrans("", "", "()\%"))) / 100
+
+            # get accuracy for all time
+            acc_all = expert.find("div", class_="accuracy all-time").find_all('span')[-1].text
+            acc_all = float(acc_all.translate(str.maketrans("", "", "()\%"))) / 100
+
+            # get prediction
+            prediction = expert.find('div', class_='prediction')
+            pred = prediction.find("img")['alt']
+            pred_date = prediction.find("div", class_='date-time')
+            if pred_date:
+                date_time = ' '.join([tag.text.strip() for tag in pred_date.find_all("span")])
+            else:
+                date_time = None
+
+            # get expert score
+            score = expert.find("div", class_='confidence')
+            expert_score = int(score.find("div", class_="confidence-wrap").find("b").text.strip())
+
+
+            new_exp = Expert(
+                name = name, title = title, accuracy_year=acc_year, 
+                accuracy_all_time=acc_all, prediction=pred, 
+                prediction_datetime=date_time, expert_score=expert_score
+            )
+
+            expert_list.append(new_exp)
+        return expert_list
+
     def _find_predictions(self, soup):
         experts = soup.find("ul", class_ = "prediction-list long expert")
         if not experts:
             return None
+        
+        # see if there are extended experts 
+        link_block = soup.find("ul", class_='link-block')
+        if link_block:
+            link = link_block.find('a')['href']
+            return self._get_extended_predictions(link)
 
         img_conversion = self._get_expert_averages(soup)
-        lead_experts = experts.find_all("li")[1:]
-        lead_experts_dict = defaultdict(dict)
-        for i, expert in enumerate(lead_experts):
-            expert_name = expert.find('a', class_='expert-link').text
-            lead_experts_dict[expert_name]['expert_score'] = expert.find('b', class_ = "confidence-score lock").text
-            lead_experts_dict[expert_name]['school'] = img_conversion[expert.find('img')['src']]
-        return lead_experts_dict
+        if img_conversion:
+            lead_experts = experts.find_all("li")[1:]
+            lead_experts_list = []
+            for i, expert in enumerate(lead_experts):
+                expert_name = expert.find('a', class_='expert-link').text
+                score = expert.find('b', class_ = "confidence-score lock").text
+                college = img_conversion[expert.find('img')['src']]
+                expert = Expert(name=expert_name, expert_score=score, prediction=college)
+                lead_experts_list.append(expert)
+            return lead_experts_list[0] if len(lead_experts_list) == 0 else lead_experts_list
+        
+
 
     def _find_accolades(self, soup):
         accolades = soup.find('section', class_ = 'accolades')

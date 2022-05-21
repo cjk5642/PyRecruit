@@ -204,6 +204,7 @@ class CollegeRecruitingInterest:
             college_status_date = college_status.find("a")
             if college_status_date:
                 college_status_date = college_status_date.text
+                college_status_date = college_status_date.translate(str.maketrans("", "", "()"))
             else:
                 college_status_date = None
 
@@ -332,6 +333,9 @@ class Evaluators:
     def _examine_single_page_evaluators(self, page):
         # get highlights
         highlights = page.find("section", class_="highlights")
+        if not highlights:
+            return None
+
         eval_date = highlights.find('div').find('h4').text.split(" ")[-1]
         evaluator = highlights.find("div", class_='evaluator')
         name = evaluator.find("b", class_='text').text
@@ -371,8 +375,77 @@ class Evaluators:
             background, skills = BackgroundSkills(scouting_report).background_skills
 
         else:
-            evaluators = soup.find('section', class_='scouting-report')
-            evaluators_list = self._example_single_page_evaluators(evaluators)
+            evaluators = self.soup.find('section', class_='scouting-report')
+            evaluators_list = self._examine_single_page_evaluators(evaluators)
             background, skills = BackgroundSkills(evaluators).background_skills
 
         return evaluators_list, background, skills
+
+class Ratings247:
+    def __init__(self, soup, pos, state):
+        self.soup = soup
+        self.pos = pos
+        self.state = state
+
+    def _find_ratings_composite_helper(self, soup, it):
+        data = {}
+        data['composite_score'] = soup.find("div", class_ = "rank-block").text
+        if data['composite_score'] == 'N/A':
+            data['composite_score'] = None
+        else:
+            data['composite_score'] = float("".join(data['composite_score'].split())) if data['composite_score'] else None
+        
+        rank_list = it.find("ul", class_ = "ranks-list").find_all("li")
+        for rl in rank_list:
+            rank_name, rank_value = rl.find("b").text, rl.find("a").find("strong").text
+            if rank_value == 'N/A':
+                rank_value = None
+
+            if rank_name == 'Natl.':
+                data['national_composite_rank'] = int(rank_value) if rank_value else None
+            if rank_name == self.pos:
+                data['position_composite_rank'] = int(rank_value) if rank_value else None
+            if rank_name == self.state:
+                data['state_composite_rank'] = int(rank_value) if rank_value else None
+        return data
+
+    def _find_ratings_normal_helper(self, soup, it):
+        data = {}
+        data['normal_score'] = soup.find("div", class_ = "rank-block").text.strip()
+        if data['normal_score'] == 'N/A':
+            data['normal_score'] = None
+        else:
+            data['normal_score'] = float("".join(data['normal_score'].split())) if data['normal_score'] else None
+
+        rank_list = it.find("ul", class_ = "ranks-list").find_all("li")
+        for rl in rank_list:
+            rank_name, rank_value = rl.find("b").text, rl.find("a").find("strong").text
+            if rank_value == 'N/A':
+                rank_value = None
+
+            if rank_name == 'Natl.':
+                data['national_normal_rank'] = int(rank_value) if rank_value else None
+            if rank_name == self.pos:
+                data['position_normal_rank'] = int(rank_value) if rank_value else None
+            if rank_name == self.state:
+                data['state_normal_rank'] = int(rank_value) if rank_value else None
+        return data
+
+    @property
+    def ratings(self):
+        ratings_sections = self.soup.find_all("section", class_ = "rankings-section")
+        data = {}
+        for rs in ratings_sections:
+            title = rs.find("h3", class_ = 'title').text
+            if 'composite' in title.lower():
+                ranking = rs.find("div", class_ = "ranking")
+                new_data = self._find_ratings_composite_helper(ranking, rs)
+                data.update(new_data)
+                
+            else:
+                ranking = rs.find("div", class_ = "ranking")
+                new_data = self._find_ratings_normal_helper(ranking, rs)
+                data.update(new_data)
+
+        ratings = Ratings(**data)
+        return ratings

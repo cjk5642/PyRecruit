@@ -1,3 +1,3 @@
 from recruits.ncaaf.player import Player, Players
-p = Players(year = 2020)
-print(p.to_df)
+p = Player("DJ-Williams-49931").player
+print(p.ratings)
