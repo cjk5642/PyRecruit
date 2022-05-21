@@ -86,6 +86,16 @@ class Ratings:
     position_normal_rank: int = None
     state_normal_rank: int = None
 
+@dataclass(init=False)
+class Skills:
+
+    @classmethod
+    def from_kwargs(cls, **kwargs):
+        ret = cls()
+        for new_name, new_val in kwargs.items():
+            setattr(ret, new_name, new_val)
+        return ret
+
 @dataclass
 class PlayerDC:
     name_id: str

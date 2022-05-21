@@ -1,3 +1,3 @@
-from recruits.ncaaf.player import Player, Players
-p = Player("DJ-Williams-49931").player
-print(p.ratings)
+import pydoc
+from recruits.ncaaf.utils import CollegeRecruitingInterest
+print(pydoc.synopsis(CollegeRecruitingInterest))
