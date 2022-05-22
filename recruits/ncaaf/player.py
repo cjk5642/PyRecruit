@@ -1,11 +1,20 @@
+"""
+Recruit script to collect group of Players and specific 
+players by designated ids from 247sports.com.
+"""
+
 from bs4 import BeautifulSoup
 import pandas as pd
 import requests
 from tqdm import tqdm
 from .utils import HEADERS, Ratings247, CollegeRecruitingInterest, Evaluators, Connections, Expert
 from .datamodels import PlayerDC
+from typing import List, Tuple, Union, Dict
 
 class Players:
+    """Collect all players given multiple parameters. This will scrape players from 247sports.com
+    that come with multiple attributes per recruit.
+    """
     players = None
     def __init__(self, 
                  year:int = None, 
@@ -26,7 +35,20 @@ class Players:
         self.url = self._create_url()
         self.html_players = self._parse_players()
 
-    def _check_position(self, pos:str):
+    def _check_position(self, pos:str) -> str:
+        """Check the players position to see if it
+        is a valid position in football.
+
+        Args:
+            pos (str): Given position from the page
+
+        Raises:
+            ValueError: If the given position is not 
+            in the list of valid positions
+
+        Returns:
+            str: Returns the valid position
+        """
         positions = ["QB", "RB", "WR", "TE", "OT", "IOL", "EDGE", "DL", "LB", "CB", "S", "ATH", "K", "P", "LS", "RET"]
         joined_pos = ', '.join(positions)
         pos = pos.upper()
@@ -34,7 +56,12 @@ class Players:
             raise ValueError(f"Position '{pos}' is not a valid position. Please use one of the following:\n[{joined_pos}]")
         return pos
 
-    def _create_url(self):
+    def _create_url(self) -> str:
+        """Method to create the url from the given parameters.
+
+        Returns:
+            str: Url for the given parameters.
+        """
         base_url = "https://247sports.com/Season/"
         year_part = f"{self.year}-Football/"
         rankings_part = "CompositeRecruitRankings/?" if self.composite_rankings else "RecruitRankings/?"
@@ -54,7 +81,12 @@ class Players:
 
         return join_base_str
 
-    def _parse_players(self):
+    def _parse_players(self) -> List:
+        """Method to collect the players from the url.
+
+        Returns:
+            List: List of all players.
+        """
         all_players = []
         print("Parsing players...")
         new_url = self.url + f"&Page=1"
@@ -83,7 +115,15 @@ class Players:
             i += 1
         return all_players
 
-    def _get_ranking(self, player: str):
+    def _get_ranking(self, player: BeautifulSoup) -> Tuple[Union[str, None], Union[str, None]]:
+        """Method to collect the players ranking from the webpage.
+
+        Args:
+            player (BeautifulSoup): Webpage to be scraped.
+
+        Returns:
+            Tuple[Union[str, None], Union[str, None]]: Player's ranking
+        """
         try:
             ranking = player.find('div', class_ = "rank-column")
             primary = ranking.find('div', class_ = "primary").text.replace("\n", "").replace(" ", "")
@@ -92,7 +132,15 @@ class Players:
         except (ValueError, AttributeError):
             return None, None
 
-    def _get_recruit(self, player: str):
+    def _get_recruit(self, player: BeautifulSoup) -> Tuple[Union[str, None], Union[str, None], Union[str, None]]:
+        """Method to collect the players metadata like name, location, and link.
+
+        Args:
+            player (BeautifulSoup): Webpage to be scraped
+
+        Returns:
+            Tuple[Union[str, None], Union[str, None], Union[str, None]]: Recruit link, Name, and Location
+        """
         try:
             recruit = player.find('div', class_ = "recruit")
             recruit_meta = recruit.find("a", class_ = "rankings-page__name-link")
@@ -105,20 +153,44 @@ class Players:
         except AttributeError:
             return None, None, None
 
-    def _get_position(self, player: str):
+    def _get_position(self, player: BeautifulSoup) -> Union[str, None]:
+        """Get the player's position
+
+        Args:
+            player (BeautifulSoup): Webpage to be scraped
+
+        Returns:
+            Union[str, None]: Player's position
+        """
         try:
             return player.find("div", class_ = 'position').text.replace("\n", "").replace(" ", "")
         except AttributeError:
             return None
 
-    def _get_metrics(self, player: str):
+    def _get_metrics(self, player: BeautifulSoup) -> Union[str, None]:
+        """Collect the players metrics.
+
+        Args:
+            player (BeautifulSoup): Webpage to be scraped
+
+        Returns:
+            Union[str, None]: Player's metrics
+        """
         try:
             metrics = player.find("div", class_ = "metrics").text
             return " ".join(metrics.split())
         except AttributeError:
             return None
 
-    def _get_ratings(self, player: str):
+    def _get_ratings(self, player: BeautifulSoup) -> Tuple[Union[str, None], Union[str, None], Union[str, None]]:
+        """Get the Player's ratings.
+
+        Args:
+            player (BeautifulSoup): Webpage to be scraped
+
+        Returns:
+            Tuple[Union[str, None], Union[str, None], Union[str, None]]: Player's ratings
+        """
         try:
             ratings = player.find("div", class_ = "rating")
             score = ratings.find("div", class_ = "rankings-page__star-and-score")
@@ -132,8 +204,15 @@ class Players:
         except AttributeError:
             return None, None, None
 
+    def _get_status(self, player:BeautifulSoup) -> Tuple[Union[str, None], Union[str, None]]:
+        """Collect the status of the player. Status would be Signed or None
 
-    def _get_status(self, player:str):
+        Args:
+            player (BeautifulSoup): Webpage to be scraped
+
+        Returns:
+            Tuple[Union[str, None], Union[str, None]]: Player's status
+        """
         try:
             status = player.find("div", class_ = "status")
         except AttributeError:
@@ -156,7 +235,13 @@ class Players:
         except:
             return None, None
     @property
-    def get_players(self):
+    def get_players(self) -> List[Dict]:
+        """Method to collect the players and store it in the class method
+        .players .
+
+        Returns:
+            List[Dict]: Collection of players
+        """
         players = []
         for player in tqdm(self.html_players):
             p_dict = {}
@@ -172,19 +257,35 @@ class Players:
         return players 
 
     @property
-    def to_df(self):
+    def to_df(self) -> pd.DataFrame:
+        """Method to extract the players as dataframe.
+
+        Returns:
+            pd.DataFrame: Pandas dataframe of all the players.
+        """
         if Players.players is None:
             Players.players = self.get_players
         
         return pd.DataFrame.from_dict(Players.players)
 
 class Player:
+    """Player class that extracts all of the details according to the player.
+    """
     def __init__(self, name_id:str):
-        """name_id found from 247 sports player page like Travis-Hunter-46084728"""
+        """Name_id found from 247 sports player page like Travis-Hunter-46084728"""
         self.name_id = name_id
         self.url = f"https://247sports.com/Player/{self.name_id}/"
 
-    def _get_page(self, url: str):
+    def _get_page(self, url: str) -> BeautifulSoup:
+        """Method to collect the page given the players name_id
+
+        Args:
+            url (str): Url of the player from name_id
+
+        Returns:
+            BeautifulSoup: Webpage to be scraped of the player
+        """
+
         if not url.startswith("https:"):
             url = "https:" + url
         page = requests.get(url, headers=HEADERS)
@@ -192,7 +293,12 @@ class Player:
         return soup
 
     @property  
-    def player(self):
+    def player(self) -> PlayerDC:
+        """Main method to extract the player details given the name_id.
+
+        Returns:
+            PlayerDC: The player's data class with multiple data features.
+        """
         soup = self._get_page(self.url)
 
         # determine if older or current recruit
@@ -257,7 +363,15 @@ class Player:
             **details
         )
 
-    def _find_metrics(self, soup_page):
+    def _find_metrics(self, soup_page: BeautifulSoup) -> Dict:
+        """Collect the player's metrics
+
+        Args:
+            soup_page (BeautifulSoup): Webpage to be scraped
+
+        Returns:
+            Dict: Player's metrics like position, height and weight
+        """
         data = {}
         metrics = soup_page.find("ul", class_ = "metrics-list").find_all("li")
         for m in metrics:
@@ -270,7 +384,15 @@ class Player:
                 data['weight'] = int(spans[1].text)
         return data
 
-    def _find_details(self, soup_page):
+    def _find_details(self, soup_page: BeautifulSoup) -> Dict:
+        """Collect the Players details like high school name and location.
+
+        Args:
+            soup_page (BeautifulSoup): Webpage to be scraped
+
+        Returns:
+            Dict: Player's details
+        """
         details = soup_page.find("ul", class_ = "details").find_all("li")
         data = {}
         for d in details:
@@ -283,7 +405,16 @@ class Player:
                 data['class_year'] = int(spans[1].text.strip())
         return data
 
-    def _get_expert_averages(self, soup):
+    def _get_expert_averages(self, soup: BeautifulSoup) -> Union[None, Dict]:
+        """Collect the averages from the Experts. This changes the 
+        school name and collects from another page.
+
+        Args:
+            soup (BeautifulSoup): Webpage to be scraped
+
+        Returns:
+            Union[None, Dict]: None or dictionary of conversions
+        """
         expert_averages = soup.find("ul", class_ = "prediction-list long")
         if not expert_averages:
             return None
@@ -296,7 +427,15 @@ class Player:
             list_ea_dict[link] = name
         return list_ea_dict
 
-    def _get_extended_predictions(self, url:str):
+    def _get_extended_predictions(self, url:str) -> List[Expert]:
+        """Collect the predictions from experts
+
+        Args:
+            url (str): Url of all experts predictions
+
+        Returns:
+            List[Expert]: List of all expert predictions of player
+        """
         soup = self._get_page(url)
         lead_experts = soup.find("ul", class_='cb-list no-border').find_all('li')
         other_experts = soup.find("ul", class_='cb-list no-margin').find_all('li')
@@ -311,11 +450,11 @@ class Player:
 
             # get accuracy for this year
             acc_year = expert.find("div", class_="accuracy year").find_all('span')[-1].text
-            acc_year = float(acc_year.translate(str.maketrans("", "", "()\%"))) / 100
+            acc_year = float(acc_year.translate(str.maketrans("", "", "()%"))) / 100
 
             # get accuracy for all time
             acc_all = expert.find("div", class_="accuracy all-time").find_all('span')[-1].text
-            acc_all = float(acc_all.translate(str.maketrans("", "", "()\%"))) / 100
+            acc_all = float(acc_all.translate(str.maketrans("", "", "()%"))) / 100
 
             # get prediction
             prediction = expert.find('div', class_='prediction')
@@ -340,7 +479,17 @@ class Player:
             expert_list.append(new_exp)
         return expert_list
 
-    def _find_predictions(self, soup):
+    def _find_predictions(self, soup: BeautifulSoup) -> Union[None, Expert, List[Expert]]:
+        """Method to collect the predictions for the player based 
+        on experts.
+
+        Args:
+            soup (BeautifulSoup): Webpage to be scraped
+
+        Returns:
+            Union[None, Expert, List[Expert]]: None, Expert or list of experts giving
+            predictions on the recruit.
+        """
         experts = soup.find("ul", class_ = "prediction-list long expert")
         if not experts:
             return None
@@ -363,9 +512,15 @@ class Player:
                 lead_experts_list.append(expert)
             return lead_experts_list[0] if len(lead_experts_list) == 0 else lead_experts_list
         
+    def _find_accolades(self, soup: BeautifulSoup) -> Union[None, List[str]]:
+        """Method to find players accolades if exists.
 
+        Args:
+            soup (BeautifulSoup): Webpage to be scraped
 
-    def _find_accolades(self, soup):
+        Returns:
+            Union[None, List[str]]: None or list of player's accolades
+        """
         accolades = soup.find('section', class_ = 'accolades')
         if not accolades:
             return None
@@ -374,7 +529,16 @@ class Player:
         accolades_final = [accolade.find('a', class_='event-link').text for i, accolade in enumerate(accolades_list)]
         return accolades_final
         
-    def _find_stats(self, soup):
+    def _find_stats(self, soup: BeautifulSoup) -> Union[None, pd.DataFrame]:
+        """Method to find the players stats over their
+        high school career.
+
+        Args:
+            soup (BeautifulSoup): Webpage to be scraped
+
+        Returns:
+            Union[None, pd.DataFrame]: None or dataframe of players stats
+        """
         stats = soup.find('section', class_="profile-stats")
         if not stats:
             return None
