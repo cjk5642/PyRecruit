@@ -97,7 +97,28 @@ class Skills:
         return ret
 
 @dataclass
-class PlayerDC:
+class PlayerPreview:
+    id: str
+    name: str
+    link: str
+    high_school: str
+    location: str
+    position: str
+    height: str
+    weight: str
+    primary_ranking: Union[int, None] = None
+    other_ranking: Union[int, None] = None
+    national_rank: Union[int, None] = None
+    position_rank: Union[int, None] = None
+    state_rank: Union[int, None] = None
+    commitment1: Union[str, None] = None
+    committed_team_percentage1: Union[float, None] = None
+    commitment2: Union[str, None] = None
+    committed_team_percentage2: Union[float, None] = None
+
+
+@dataclass
+class PlayerExtended:
     name_id: str
     url: str
     recruit_name: str
