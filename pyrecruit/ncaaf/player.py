@@ -3,14 +3,16 @@ Recruit script to collect group of Players and specific
 players by designated ids from 247sports.com.
 """
 
+from multiprocessing.sharedctypes import Value
 from bs4 import BeautifulSoup
 import pandas as pd
 import requests
 from tqdm import tqdm
-from .utils import HEADERS, Ratings247, CollegeRecruitingInterest, Evaluators, Connections, Expert
-from .datamodels import PlayerExtended, PlayerPreview
+from .utils import HEADERS, CollegeRecruitingInterest, Connections, Evaluators, Expert, CollectPlayers, Ratings247
+from .datamodels import PlayerCrystalBall, PlayerExtended, PlayerPreview
 from typing import List, Tuple, Union, Dict
 from dataclasses import asdict
+from datetime import datetime
 
 union_str_none = Union[str, None]
 
@@ -35,7 +37,7 @@ class Players:
         self.state = state
         if not Players.players:
             self._url = self._create_url()
-            self._html_players = self._parse_players()
+            self._html_players = CollectPlayers(self._url, self.top).players
             Players.players = self._get_players()
 
     def _check_position(self, pos:str) -> str:
@@ -83,47 +85,6 @@ class Players:
             join_base_str += f"&State={self.state}"
 
         return join_base_str
-
-    def _parse_players(self) -> list:
-        """Method to collect the players from the url.
-
-        Returns:
-            List: List of all players.
-        """
-        all_players = []
-        print("Parsing players...")
-        new_url = self._url + f"&Page=1"
-        page = requests.get(new_url, headers = HEADERS)
-        soup = BeautifulSoup(page.content, "html.parser")
-        players = soup.findAll("li", class_ = "rankings-page__list-item")[:-1]
-        players = [p.find('div', class_ = "wrapper") for p in players]
-        
-        # add first page of players to all players
-        all_players.extend(players)
-        num_players = len(players)
-        
-        # check if the number of requested players is already within the first page
-        if num_players >= self.top:
-            return all_players[:self.top]
-
-        # if multiple pages are needed then collect the players
-        i = 2
-        pbar = tqdm(total = self.top - num_players)
-        while num_players < self.top:
-            new_url = self._url + f"&Page={i}"
-            page = requests.get(new_url, headers = HEADERS)
-            soup = BeautifulSoup(page.content, "html.parser")
-            players = soup.findAll("li", class_ = "rankings-page__list-item")[:-1]
-            for p in players:
-                p = p.find('div', class_ = "wrapper")
-                if num_players < self.top:
-                    num_players += 1
-                    pbar.update(1)
-                    all_players.append(p)
-                else:
-                    break
-            i += 1
-        return all_players
 
     def _get_ranking(self, player: BeautifulSoup) -> Tuple[union_str_none, union_str_none]:
         """Method to collect the players ranking from the webpage.
@@ -176,7 +137,9 @@ class Players:
         recruit_high_school, recruit_location = recruit_location.split("(")
         recruit_high_school = recruit_high_school.strip()
         recruit_location = recruit_location.rstrip(")")
-        return recruit_id, recruit_link, recruit_name, recruit_high_school, recruit_location
+
+        city, state = recruit_location.split(", ")
+        return recruit_id, recruit_link, recruit_name, recruit_high_school, city, state
 
     def _get_position(self, player: BeautifulSoup) -> union_str_none:
         """Get the player's position
@@ -280,20 +243,22 @@ class Players:
         players = []
         for player in tqdm(self._html_players):
             primary_ranking, other_ranking = self._get_ranking(player)
-            recruit_id, recruit_link, recruit_name, recruit_hs, recruit_location = self._get_recruit(player)
+            recruit_id, recruit_link, recruit_name, recruit_hs, city, state = self._get_recruit(player)
             position = self._get_position(player)
             height, weight = self._get_metrics(player)
             national_rank, position_rank, state_rank = self._get_ratings(player)
             committed_team, committed_team_percentage, committed_team2, committed_team_percentage2 = self._get_status(player)
             player = PlayerPreview(
-                id = recruit_id,
-                name=recruit_name,
-                link=recruit_link,
+                name_id = recruit_id,
+                recruit_name=recruit_name,
+                url=recruit_link,
                 high_school=recruit_hs,
-                location=recruit_location,
+                city=city,
+                state=state,
                 position=position,
                 height=height,
                 weight=weight,
+                class_year=self.year,
                 primary_ranking=primary_ranking,
                 other_ranking=other_ranking,
                 national_rank=national_rank,
@@ -323,6 +288,7 @@ class Players:
         return pd.DataFrame.from_dict([asdict(p) for p in Players.players])
 
 class Player:
+
     """Player class that extracts all of the details according to the player.
     """
     def __init__(self, name_id:str):
@@ -603,3 +569,123 @@ class Player:
         right_table = pd.read_html(right_table_html)[0]
         total = pd.concat([left_table, right_table], axis = 1)
         return total
+
+class CrystalBall:
+    """Collects the crystal ball predictions from this recruiting year. For example,
+    if the current year is 2022, then football season is the 2022-2023 season. The crystal
+    ball predictions will be for the 2023 recruiting class."""
+    players = None
+    def __init__(self, top: int = 100):
+        self._year = datetime.now().year + 1
+        self._url = f"https://247sports.com/Season/{self._year}-Football/CurrentTargetPredictions/"
+
+        self.top = top
+        if not CrystalBall.players:
+            self._players = CollectPlayers(self._url, self.top, players_class="target").players
+            CrystalBall.players = self._get_players()
+    
+    def _get_details(self, player: BeautifulSoup):
+        details = player.find("li", class_='name')
+        a_details = details.find("a")
+
+        url = a_details['href'].strip()
+        recruit_id = url.split("/")[-2]
+        recruit_name = " ".join(a_details.text.split())
+        recruit_name, class_year = recruit_name.strip().split("(")
+        class_year = int(class_year.rstrip(")"))
+
+        # extract bottom part of details block
+        extra_details, ranking = details.findAll('span')[1:3]
+        pos, height, weight = extra_details.text.strip().split(" / ")
+
+        # collect stars and rating
+        rating = ranking.find("b").text
+        rating = None if rating == 'NA' else float(rating)
+        if not rating:
+            stars = None
+        else:
+            stars = len(list(ranking.findAll("span", class_="icon-starsolid yellow")))
+    
+        return recruit_id, url, recruit_name, class_year, pos, height, int(weight), stars, rating
+
+    def _get_predictor(self, player: BeautifulSoup):
+        predicted_by = player.find("li", class_="predicted-by")
+        info = predicted_by.find("a")
+        link = info['href']
+        id = link.strip().split("/")[-3]
+
+        name, affiliation = info.findAll("span")
+        name, affiliation = name.text.strip(), affiliation.text.strip()
+        
+        return id, name, link, affiliation
+
+    def _get_predictor_accuracy(self, player: BeautifulSoup):
+        accuracy = player.find("li", class_='accuracy')
+        accuracy = accuracy.findAll("span")[1].text.strip().lstrip('(').rstrip(")")
+        return accuracy
+
+    def _get_prediction(self, player: BeautifulSoup):
+        prediction = player.find("li", class_='prediction')
+        prediction_team = prediction.find('div').find('img')['alt']
+        prediction_datetime = prediction.find("span", class_="prediction-date").text.strip()
+        return prediction_team, prediction_datetime
+
+    def _get_prediction_confidence(self, player: BeautifulSoup):
+        confidence = player.find("li", class_="confidence")
+        confidence_score, confidence_text = confidence.findAll("b")
+
+        # check if it is a vip scoop
+        scoop = confidence.find("a", class_='scoop-link')
+        if not scoop:
+            return int(confidence_score.text), confidence_text.text, False
+        else:
+            return int(confidence_score.text), confidence_text.text, True
+
+    def _get_players(self) -> List[PlayerCrystalBall]:
+        all_players = []
+
+        for player in self._players:
+            # get player details
+            name_id, url, recruit_name, class_year, \
+                pos, height, weight, stars, rating = self._get_details(player)
+            
+            # get predictor details
+            predictor_id, predictor_name, predictor_link, predictor_affiliation = self._get_predictor(player)
+            predictor_accuracy = self._get_predictor_accuracy(player)
+
+            # get prediction details
+            prediction_team, prediction_datetime = self._get_prediction(player)
+            confidence_score, confidence_text, vip_scoop = self._get_prediction_confidence(player)
+
+
+            player_dc = PlayerCrystalBall(
+                name_id=name_id,
+                url=url,
+                recruit_name=recruit_name,
+                class_year=class_year,
+                pos=pos,
+                height=height,
+                weight=weight,
+                stars=stars,
+                rating=rating,
+                predictor_id=predictor_id,
+                predictor_name=predictor_name,
+                predictor_link=predictor_link,
+                predictor_affiliation=predictor_affiliation,
+                predictor_accuracy=predictor_accuracy,
+                prediction_team=prediction_team,
+                prediction_datetime=prediction_datetime,
+                confidence_score=confidence_score,
+                confidence_text=confidence_text,
+                vip_scoop=vip_scoop
+            )
+            all_players.append(player_dc)
+        return all_players
+
+    @property
+    def dataframe(self):
+        if not CrystalBall.players:
+            CrystalBall.players = self._get_players()
+        return pd.DataFrame.from_dict([asdict(p) for p in CrystalBall.players])
+
+

@@ -98,14 +98,16 @@ class Skills:
 
 @dataclass
 class PlayerPreview:
-    id: str
-    name: str
-    link: str
+    name_id: str
+    recruit_name: str
+    url: str
     high_school: str
-    location: str
+    city: str
+    state: str
     position: str
     height: str
     weight: str
+    class_year: int
     primary_ranking: Union[int, None] = None
     other_ranking: Union[int, None] = None
     national_rank: Union[int, None] = None
@@ -138,3 +140,25 @@ class PlayerExtended:
     skills: dict = None
     stats: DataFrame = None
     connections: Union[List[Connection], Connection, None] = None
+
+@dataclass
+class PlayerCrystalBall:
+    name_id: str
+    url: str
+    recruit_name: str
+    class_year: int
+    pos: str
+    height: str
+    weight: int
+    stars: int
+    rating: str
+    predictor_id: str
+    predictor_name: str
+    predictor_link: str
+    predictor_affiliation: str
+    predictor_accuracy: str
+    prediction_team: str
+    prediction_datetime: str
+    confidence_score: int
+    confidence_text: str
+    vip_scoop: bool

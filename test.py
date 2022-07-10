@@ -1,3 +1,3 @@
-from pyrecruit.ncaaf.player import Players
-players = Players(year = 2018, top=100)
-print(players.dataframe)
+from pyrecruit.ncaaf.player import CrystalBall
+players = CrystalBall(top = 10)
+print(players.dataframe.head())
