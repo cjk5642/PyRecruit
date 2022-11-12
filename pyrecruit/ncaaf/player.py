@@ -29,7 +29,7 @@ class Players:
                  state:str = None,
                  top:int = 100):
 
-        self.year = 2022 if not year else year
+        self.year = int(datetime.now().year) if not year else year
         self.institution = institution
         self.pos = self._check_position(pos) if pos else None
         self.top = top
@@ -282,9 +282,6 @@ class Players:
         Returns:
             pd.DataFrame: Pandas dataframe of all the players.
         """
-        if Players.players is None:
-            Players.players = self.get_players
-        
         return pd.DataFrame.from_dict([asdict(p) for p in Players.players])
 
 class Player:
@@ -634,12 +631,14 @@ class CrystalBall:
         confidence = player.find("li", class_="confidence")
         confidence_score, confidence_text = confidence.findAll("b")
 
+        confidence_text_value = confidence_text.text if confidence_text.text != 'Med' else 'Medium'
+
         # check if it is a vip scoop
         scoop = confidence.find("a", class_='scoop-link')
         if not scoop:
-            return int(confidence_score.text), confidence_text.text, False
+            return int(confidence_score.text), confidence_text_value, False
         else:
-            return int(confidence_score.text), confidence_text.text, True
+            return int(confidence_score.text), confidence_text_value, True
 
     def _get_players(self) -> List[PlayerCrystalBall]:
         all_players = []

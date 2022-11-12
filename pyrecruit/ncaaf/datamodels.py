@@ -162,3 +162,7 @@ class PlayerCrystalBall:
     confidence_score: int
     confidence_text: str
     vip_scoop: bool
+
+@dataclass
+class TeamPreview:
+    pass
