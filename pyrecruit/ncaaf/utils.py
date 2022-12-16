@@ -67,6 +67,11 @@ class CollectPlayers:
         return all_players
 
     def _crystal_ball_players(self) -> list:
+        """Collect all of the top N crystall ball recruits
+
+        Returns:
+            list: crystal ball players
+        """
         print("Parsing Crystal ball players...")
         all_players = []
         
@@ -117,6 +122,8 @@ class CollectPlayers:
         raise ValueError("Incorrect selection")
 
 class CollectTeams:
+    """Class to collect all of the teams based on top N teams
+    """
     def __init__(self, url: str, top: int, teams_class:str = "rankings-page__list-item"):
         self._url = url + r"?ViewPath=~%2FViews%2FSkyNet%2FInstitutionRanking%2F_SimpleSetForSeason.ascx"
         self.top = top
@@ -169,7 +176,7 @@ class CollectTeams:
         if self.teams_class == "rankings-page__list-item":
             return self._regular_teams()
         if self.teams_class == 'target':
-            return self._crystal_ball_teams()
+            raise NotImplementedError
 
 class Connections:
     def __init__(self, soup: BeautifulSoup):

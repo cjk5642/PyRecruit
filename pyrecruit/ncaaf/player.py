@@ -580,7 +580,16 @@ class CrystalBall:
             self._players = CollectPlayers(self._url, self.top, players_class="target").players
             CrystalBall.players = self._get_players()
     
-    def _get_details(self, player: BeautifulSoup):
+    def _get_details(self, player: BeautifulSoup) -> tuple:
+        """Collect the details of the recruit in the crystal
+        ball predictor
+
+        Args:
+            player (BeautifulSoup): soup page to be parsed
+
+        Returns:
+            tuple: Details of the recruit
+        """
         details = player.find("li", class_='name')
         a_details = details.find("a")
 
@@ -604,7 +613,16 @@ class CrystalBall:
     
         return recruit_id, url, recruit_name, class_year, pos, height, int(weight), stars, rating
 
-    def _get_predictor(self, player: BeautifulSoup):
+    def _get_predictor(self, player: BeautifulSoup) -> tuple:
+        """Collect details on the person predicting 
+        on the recruit
+
+        Args:
+            player (BeautifulSoup): soup page to be parsed
+
+        Returns:
+            tuple: Details of the predictor
+        """
         predicted_by = player.find("li", class_="predicted-by")
         info = predicted_by.find("a")
         link = info['href']
@@ -615,18 +633,42 @@ class CrystalBall:
         
         return id, name, link, affiliation
 
-    def _get_predictor_accuracy(self, player: BeautifulSoup):
+    def _get_predictor_accuracy(self, player: BeautifulSoup) -> str:
+        """Collect general accuracy of the predictor
+
+        Args:
+            player (BeautifulSoup): soup page to be parsed
+
+        Returns:
+            str: accuracy of the predictor
+        """
         accuracy = player.find("li", class_='accuracy')
         accuracy = accuracy.findAll("span")[1].text.strip().lstrip('(').rstrip(")")
         return accuracy
 
-    def _get_prediction(self, player: BeautifulSoup):
+    def _get_prediction(self, player: BeautifulSoup) -> tuple:
+        """Collect prediction of the predictor
+
+        Args:
+            player (BeautifulSoup): soup page to be parsed
+
+        Returns:
+            tuple: details of the prediction
+        """
         prediction = player.find("li", class_='prediction')
         prediction_team = prediction.find('div').find('img')['alt']
         prediction_datetime = prediction.find("span", class_="prediction-date").text.strip()
         return prediction_team, prediction_datetime
 
-    def _get_prediction_confidence(self, player: BeautifulSoup):
+    def _get_prediction_confidence(self, player: BeautifulSoup) -> tuple:
+        """Collect the confidence of the prediction from the predictor
+
+        Args:
+            player (BeautifulSoup): soup page to be parsed
+
+        Returns:
+            tuple: details of the prediction
+        """
         confidence = player.find("li", class_="confidence")
         confidence_score, confidence_text = confidence.findAll("b")
 
@@ -640,6 +682,11 @@ class CrystalBall:
             return int(confidence_score.text), confidence_text_value, True
 
     def _get_players(self) -> List[PlayerCrystalBall]:
+        """Collect all of the players from the crystal ball
+
+        Returns:
+            List[PlayerCrystalBall]: All predicted recruits
+        """
         all_players = []
 
         for player in self._players:
@@ -655,7 +702,7 @@ class CrystalBall:
             prediction_team, prediction_datetime = self._get_prediction(player)
             confidence_score, confidence_text, vip_scoop = self._get_prediction_confidence(player)
 
-
+            # store player in the crystal ball dataclass
             player_dc = PlayerCrystalBall(
                 name_id=name_id,
                 url=url,
@@ -681,7 +728,12 @@ class CrystalBall:
         return all_players
 
     @property
-    def dataframe(self):
+    def dataframe(self) -> pd.DataFrame:
+        """Send results to the DataFrame
+
+        Returns:
+            pd.DataFrame: _description_
+        """
         if not CrystalBall.players:
             CrystalBall.players = self._get_players()
         return pd.DataFrame.from_dict([asdict(p) for p in CrystalBall.players])
