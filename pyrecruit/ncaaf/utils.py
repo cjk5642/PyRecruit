@@ -1,13 +1,14 @@
 """
 Utilities class for NCAAF Players and Teams
 """
+from typing import Union, List, Tuple, Dict
 
 import requests
-from .datamodels import *
 from bs4 import BeautifulSoup
-from typing import Union, List, Tuple, Dict
-from .staff import Staff
 from tqdm import tqdm
+
+from .staff import Staff
+from .datamodels import Connection, CollegeInterest, Skills, Evaluator, Ratings
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.87 Safari/537.36',
@@ -23,8 +24,8 @@ class CollectPlayers:
         print("Parsing Regular players...")
         all_players = []
 
-        new_url = self._url + f"&Page=1"
-        page = requests.get(new_url, headers = HEADERS)
+        new_url = self._url + "&Page=1"
+        page = requests.get(new_url, headers = HEADERS, timeout=10)
         soup = BeautifulSoup(page.content, "html.parser")
         players = page.findAll("li", class_ = "rankings-page__list-item")[:-1]
         players = [p.find('div', class_ = "wrapper") for p in players]
@@ -34,7 +35,7 @@ class CollectPlayers:
         num_players = len(players)
         
         # check if the number of requested players is already within the first page
-        if num_players >= self.top:
+        if num_players >= self.top and self.top != 'all':
             return all_players[:self.top]
 
         # if multiple pages are needed then collect the players
@@ -42,7 +43,7 @@ class CollectPlayers:
         pbar = tqdm(total = self.top - num_players)
         while num_players < self.top:
             new_url = self._url + f"&Page={i}"
-            page = requests.get(new_url, headers = HEADERS)
+            page = requests.get(new_url, headers = HEADERS, timeout=10)
             soup = BeautifulSoup(page.content, "html.parser")
             players = soup.findAll("li", class_ = "rankings-page__list-item")[:-1]
             for p in players:
@@ -60,9 +61,8 @@ class CollectPlayers:
         print("Parsing Crystal ball players...")
         all_players = []
         
-        new_url = self._url + f"?Page=1"
-        print(new_url)
-        page = requests.get(new_url, headers = HEADERS)
+        new_url = self._url + "?Page=1"
+        page = requests.get(new_url, headers = HEADERS, timeout=10)
         soup = BeautifulSoup(page.content, "html.parser")
         players = soup.findAll("li", class_ = "target")
         players = [p.find('ul') for p in players]
@@ -72,7 +72,7 @@ class CollectPlayers:
         num_players = len(players)
         
         # check if the number of requested players is already within the first page
-        if num_players >= self.top:
+        if self.top != 'all' and num_players >= self.top:
             return all_players[:self.top]
 
         # if multiple pages are needed then collect the players
@@ -80,7 +80,7 @@ class CollectPlayers:
         pbar = tqdm(total = self.top - num_players)
         while num_players < self.top:
             new_url = self._url + f"?Page={i}"
-            page = requests.get(new_url, headers = HEADERS)
+            page = requests.get(new_url, headers = HEADERS, timeout=10)
             soup = BeautifulSoup(page.content, "html.parser")
             players = soup.findAll("li", class_ = "target")
             for p in players:
@@ -116,8 +116,8 @@ class CollectTeams:
         print("Parsing Regular teams...")
         all_teams = []
 
-        new_url = self._url + f"&Page=1"
-        page = requests.get(new_url, headers = HEADERS)
+        new_url = self._url + "&Page=1"
+        page = requests.get(new_url, headers = HEADERS, timeout=10)
         soup = BeautifulSoup(page.content, "html.parser")
         teams = soup.findAll("li", class_ = "rankings-page__list-item")
         teams = [p.find('div', class_ = "wrapper") for p in teams]
@@ -127,7 +127,7 @@ class CollectTeams:
         num_teams = len(teams)
         
         # check if the number of requested teams is already within the first page
-        if num_teams >= self.top:
+        if self.top != 'all' and num_teams >= self.top:
             return all_teams[:self.top]
 
         # if multiple pages are needed then collect the players
@@ -135,7 +135,7 @@ class CollectTeams:
         pbar = tqdm(total = self.top - num_teams)
         while num_teams < self.top:
             new_url = self._url + f"&Page={i}"
-            page = requests.get(new_url, headers = HEADERS)
+            page = requests.get(new_url, headers = HEADERS, timeout=10)
             soup = BeautifulSoup(page.content, "html.parser")
             players = soup.findAll("li", class_ = "rankings-page__list-item")
             for p in players:
@@ -208,7 +208,7 @@ class CollegeRecruitingInterest:
             List[CollegeInterest]: Data of all colleges that actively recruited recruit
         """
         school_list = []
-        page = requests.get(url, headers=HEADERS)
+        page = requests.get(url, headers=HEADERS, timeout=10)
         soup = BeautifulSoup(page.content, "html.parser")
         interests = soup.find("ul", class_ = "recruit-interest-index_lst")
         first_blocks = interests.find_all("div", class_='first_blk')
@@ -352,7 +352,7 @@ class Evaluators:
 
         evaluators = page.find("section", class_="main-content list-content")
         evaluators_list = evaluators.find("ul", class_='evaluation-list').find_all("li")
-        evaluators_list = list()
+        evaluators_list = []
         for evaluator in evaluators_list:
             eval_id = evaluator.get('id')
             eval_id = int(eval_id) if eval_id else None
@@ -452,7 +452,7 @@ class Evaluators:
         evaluations = scouting_report.find("header").find('a', class_='view-all-eval-link')
         if evaluations:
             url = evaluations['href']
-            page = requests.get(url, headers = HEADERS)
+            page = requests.get(url, headers = HEADERS, timeout=10)
             soup = BeautifulSoup(page.content, 'lxml')
             evaluators_list = self._examine_multiple_evaluators(soup)
             background, skills = BackgroundSkills(scouting_report).background_skills

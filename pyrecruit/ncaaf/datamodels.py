@@ -165,4 +165,13 @@ class PlayerCrystalBall:
 
 @dataclass
 class TeamPreview:
-    pass
+    team_id: str
+    team_name: str
+    primary_ranking: int = None
+    other_ranking: int = None
+    total_commiits: int = None
+    team_avg: float = None
+    team_points: float = None
+    five_star: int = None
+    four_star: int = None
+    three_star: int = None
