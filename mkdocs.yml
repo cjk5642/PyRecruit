@@ -1,0 +1,11 @@
+docs_dir: docs
+site_name: pyrecruit
+site_url: https://cjk5642.github.io/PyRecruit
+site_dir: gh_pages
+
+nav:
+  - Home: 'index.md'
+  - Usage: 'Usage.md'
+
+theme:
+  name: material
