@@ -4,8 +4,7 @@ on:
   # Triggers the workflow on push
   push:
     branches:
-      - actions-dev
-      - develop
+      - main
 
 jobs:
   build:
