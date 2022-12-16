@@ -1,3 +1,7 @@
+"""Script housing all of the dataclasses used 
+across the project.
+"""
+
 from typing import Optional, Union, NewType, List
 from dataclasses import dataclass
 import pandas as pd
@@ -6,6 +10,8 @@ DataFrame = NewType('DataFrame', pd.DataFrame)
 
 @dataclass
 class Evaluator:
+    """Evaluator Dataclass
+    """
     id: int
     name: str
     region: str
@@ -17,18 +23,24 @@ class Evaluator:
 
 @dataclass
 class Connection:
+    """Connection dataclass
+    """
     name: str
     relation: str
     accolades: Union[list, str]
 
 @dataclass
 class CoachHistory:
+    """History of the Coach dataclass
+    """
     college: str
     year: str
     position: str
 
 @dataclass
 class TopCommit:
+    """Top Commit dataclass
+    """
     name: str
     location: str
     position: str
@@ -41,6 +53,8 @@ class TopCommit:
 
 @dataclass
 class StaffMember:
+    """Staff Member dataclass
+    """
     name: str
     position: str = None
     alma_mater: str = None
@@ -58,6 +72,8 @@ class StaffMember:
 
 @dataclass
 class CollegeInterest:
+    """College Interest of the player dataclass
+    """
     college: str
     status: Union[str, None]
     status_date: Union[str, None]
@@ -67,6 +83,8 @@ class CollegeInterest:
 
 @dataclass
 class Expert:
+    """Expert Dataclass
+    """
     name: str
     expert_score: str
     prediction: str
@@ -77,6 +95,8 @@ class Expert:
 
 @dataclass
 class Ratings:
+    """Ratings dataclass
+    """
     composite_score: float = None
     national_composite_rank: int = None
     position_composite_rank: int = None
@@ -88,9 +108,16 @@ class Ratings:
 
 @dataclass(init=False)
 class Skills:
+    """Skills dataclass of the player
+    """
 
     @classmethod
     def from_kwargs(cls, **kwargs):
+        """Method to allow extra parameters to the dataclass
+
+        Returns:
+            ret: class parameters that were added to the dataclass
+        """
         ret = cls()
         for new_name, new_val in kwargs.items():
             setattr(ret, new_name, new_val)
@@ -98,6 +125,8 @@ class Skills:
 
 @dataclass
 class PlayerPreview:
+    """An overview of Recruit dataclass
+    """
     name_id: str
     recruit_name: str
     url: str
@@ -121,6 +150,8 @@ class PlayerPreview:
 
 @dataclass
 class PlayerExtended:
+    """Detailed information on the Recruit dataclass
+    """
     name_id: str
     url: str
     recruit_name: str
@@ -143,6 +174,8 @@ class PlayerExtended:
 
 @dataclass
 class PlayerCrystalBall:
+    """Crystal Ball predictions of Recruit dataclass
+    """
     name_id: str
     url: str
     recruit_name: str
@@ -165,6 +198,8 @@ class PlayerCrystalBall:
 
 @dataclass
 class TeamPreview:
+    """Overview of Team recruiting dataclass
+    """
     team_id: str
     team_name: str
     primary_ranking: int = None

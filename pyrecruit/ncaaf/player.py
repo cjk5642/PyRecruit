@@ -3,13 +3,12 @@ Recruit script to collect group of Players and specific
 players by designated ids from 247sports.com.
 """
 
-from multiprocessing.sharedctypes import Value
 from bs4 import BeautifulSoup
 import pandas as pd
 import requests
 from tqdm import tqdm
-from .utils import HEADERS, CollegeRecruitingInterest, Connections, Evaluators, Expert, CollectPlayers, Ratings247
-from .datamodels import PlayerCrystalBall, PlayerExtended, PlayerPreview
+from .utils import HEADERS, CollegeRecruitingInterest, Connections, Evaluators, CollectPlayers, Ratings247
+from .datamodels import PlayerCrystalBall, PlayerExtended, PlayerPreview, Expert
 from typing import List, Tuple, Union, Dict
 from dataclasses import asdict
 from datetime import datetime
@@ -305,7 +304,7 @@ class Player:
 
         if not url.startswith("https:"):
             url = "https:" + url
-        page = requests.get(url, headers=HEADERS)
+        page = requests.get(url, headers=HEADERS, timeout=10)
         soup = BeautifulSoup(page.content, "html.parser")
         return soup
 

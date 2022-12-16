@@ -15,12 +15,21 @@ HEADERS = {
 }
 
 class CollectPlayers:
+    """Collection of Players utility class to select top 
+    n players
+    """
     def __init__(self, url: str, top: int, players_class: str = "rankings-page__list-item"):
         self._url = url
         self.top = top
         self.players_class = players_class
 
-    def _regular_players(self):
+    def _regular_players(self) -> list:
+        """Extract non predictions of players given heuristic
+        characteristcs. 
+
+        Returns:
+            list: list of all collect players
+        """
         print("Parsing Regular players...")
         all_players = []
 
@@ -57,7 +66,7 @@ class CollectPlayers:
             i += 1
         return all_players
 
-    def _crystal_ball_players(self):
+    def _crystal_ball_players(self) -> list:
         print("Parsing Crystal ball players...")
         all_players = []
         
@@ -105,6 +114,7 @@ class CollectPlayers:
             return self._regular_players()
         if self.players_class == 'target':
             return self._crystal_ball_players()
+        raise ValueError("Incorrect selection")
 
 class CollectTeams:
     def __init__(self, url: str, top: int, teams_class:str = "rankings-page__list-item"):
