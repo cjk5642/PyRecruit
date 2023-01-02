@@ -13,15 +13,14 @@ from .connections import Connections
 from .evaluators import Evaluators
 from .collection import CollectPlayers
 from .ratings247 import Ratings247
-from .datamodels import PlayerCrystalBall, PlayerExtended, PlayerPreview, Expert
-from dataclasses import asdict
+from .datamodels import PlayerCrystalBall, PlayerExtended, PlayerPreview, Expert, \
+    AbstractPlayer, CrystalballPlayersDC, PlayersDC
 from datetime import datetime
 
 class Players:
     """Collect all players given multiple parameters. This will scrape players from 247sports.com
     that come with multiple attributes per recruit.
     """
-    players = None
     def __init__(self, 
                  year:int = None, 
                  institution:str = "HighSchool", 
@@ -36,10 +35,8 @@ class Players:
         self.top = top
         self.composite_rankings = composite_rankings
         self.state = state
-        if not Players.players:
-            self._url = self._create_url()
-            self._html_players = CollectPlayers(self._url, self.top).players
-            Players.players = self._get_players()
+        self._url = self._create_url()
+        self._html_players = CollectPlayers(self._url, self.top).players
 
     def _check_position(self, pos:str) -> str:
         """Check the players position to see if it
@@ -233,8 +230,8 @@ class Players:
         percentage2 = team_helper2.find('span', class_ = 'percentage').text.strip()
         return team, percentage, team2, percentage2
         
-    
-    def _get_players(self) -> list[PlayerPreview]:
+    @property
+    def players(self) -> list[PlayerPreview]:
         """Method to collect the players and store it in the class method
         .players .
 
@@ -249,7 +246,9 @@ class Players:
             height, weight = self._get_metrics(player)
             national_rank, position_rank, state_rank = self._get_ratings(player)
             committed_team, committed_team_percentage, committed_team2, committed_team_percentage2 = self._get_status(player)
-            player = PlayerPreview(
+            
+            # establish abstract player
+            abstract_player = AbstractPlayer(
                 name_id = recruit_id,
                 recruit_name=recruit_name,
                 url=recruit_link,
@@ -260,6 +259,10 @@ class Players:
                 height=height,
                 weight=weight,
                 class_year=self.year,
+            )
+            
+            player = PlayerPreview(
+                abstract_player=abstract_player,
                 primary_ranking=primary_ranking,
                 other_ranking=other_ranking,
                 national_rank=national_rank,
@@ -272,18 +275,7 @@ class Players:
             )
             players.append(player)
 
-        # cache player list in class
-        Players.players = players
-        return players 
-
-    @property
-    def dataframe(self) -> pd.DataFrame:
-        """Method to extract the players as dataframe.
-
-        Returns:
-            pd.DataFrame: Pandas dataframe of all the players.
-        """
-        return pd.DataFrame.from_dict([asdict(p) for p in Players.players])
+        return PlayersDC(players = players)
 
 class Player:
 
@@ -364,10 +356,17 @@ class Player:
         print("Getting Connections...")
         connections = Connections(soup).connections
 
-        return PlayerExtended(
+        # estbalish abstract player
+        abstract_player = AbstractPlayer(
             name_id = self.name_id, 
             url = self.url, 
-            recruit_name = recruit_name, 
+            recruit_name = recruit_name,
+            **details,
+            **metrics
+        )
+
+        return PlayerExtended(
+            abstract_player=abstract_player,
             experts = experts, 
             college_interest = college_interest,
             accolades = accolades,
@@ -376,9 +375,7 @@ class Player:
             skills = skills, 
             stats = stats,
             connections = connections,
-            ratings=ratings_data,
-            **metrics,
-            **details
+            ratings=ratings_data
         )
 
     def _find_metrics(self, soup_page: BeautifulSoup) -> dict:
@@ -395,7 +392,7 @@ class Player:
         for m in metrics:
             spans =  m.find_all("span")
             if spans[0].text == 'Pos':
-                data['pos'] = spans[1].text
+                data['position'] = spans[1].text
             if spans[0].text == "Height":
                 data['height'] = spans[1].text
             if spans[0].text == 'Weight':
@@ -628,12 +625,12 @@ class CrystalBall:
         predicted_by = player.find("li", class_="predicted-by")
         info = predicted_by.find("a")
         link = info['href']
-        id = link.strip().split("/")[-3]
+        id_predictor = link.strip().split("/")[-3]
 
         name, affiliation = info.findAll("span")
         name, affiliation = name.text.strip(), affiliation.text.strip()
         
-        return id, name, link, affiliation
+        return id_predictor, name, link, affiliation
 
     def _get_predictor_accuracy(self, player: BeautifulSoup) -> str:
         """Collect general accuracy of the predictor
@@ -704,15 +701,20 @@ class CrystalBall:
             prediction_team, prediction_datetime = self._get_prediction(player)
             confidence_score, confidence_text, vip_scoop = self._get_prediction_confidence(player)
 
-            # store player in the crystal ball dataclass
-            player_dc = PlayerCrystalBall(
+            # establish abstract player
+            abstract_player = AbstractPlayer(
                 name_id=name_id,
                 url=url,
                 recruit_name=recruit_name,
                 class_year=class_year,
-                pos=pos,
+                position=pos,
                 height=height,
-                weight=weight,
+                weight=weight
+            )
+
+            # store player in the crystal ball dataclass
+            player_dc = PlayerCrystalBall(
+                abstract_player=abstract_player,
                 stars=stars,
                 rating=rating,
                 predictor_id=predictor_id,
@@ -727,17 +729,4 @@ class CrystalBall:
                 vip_scoop=vip_scoop
             )
             all_players.append(player_dc)
-        return all_players
-
-    @property
-    def dataframe(self) -> pd.DataFrame:
-        """Send results to the DataFrame
-
-        Returns:
-            pd.DataFrame: _description_
-        """
-        if not CrystalBall.players:
-            CrystalBall.players = self._get_players()
-        return pd.DataFrame.from_dict([asdict(p) for p in CrystalBall.players])
-
-
+        return CrystalballPlayersDC(players = all_players)

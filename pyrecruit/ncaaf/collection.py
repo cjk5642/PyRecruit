@@ -1,3 +1,7 @@
+"""collection script holds collection classes for players
+and teams based on url.
+"""
+
 from bs4 import BeautifulSoup
 import requests
 from .utils import HEADERS
@@ -87,11 +91,11 @@ class CollectPlayers:
             soup = BeautifulSoup(page.content, "html.parser")
             players = soup.findAll("li", class_ = "target")
             for p in players:
-                p = p.find('ul', class_ = "wrapper")
+                ps = p.find('ul', class_ = "wrapper")
                 if num_players < self.top:
                     num_players += 1
                     pbar.update(1)
-                    all_players.append(p)
+                    all_players.append(ps)
                 else:
                     break
             i += 1
