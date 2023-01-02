@@ -1,13 +1,11 @@
 import pandas as pd
 from tqdm import tqdm
-from .utils import CollectTeams
+from .collection import CollectTeams
 from .datamodels import TeamPreview
 from dataclasses import asdict
 from datetime import datetime
-from typing import Union
 from bs4 import BeautifulSoup
 
-union_str_none = Union[str, None]
 
 class Teams:
     """Collect all teams with given parameters. 
